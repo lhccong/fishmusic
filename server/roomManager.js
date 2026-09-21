@@ -5635,11 +5635,13 @@ function serializeChatMessage(message, options = {}) {
     source = sanitizeStoredAiBotMessage(roomId, source);
   }
 
+  // 表情包必须保留 data URL，否则历史消息刷新后只能看到 [表情包] 占位
+  const isSticker = Boolean(source.asSticker) || String(source.imageKey || '').startsWith('local-sticker:');
   const imageUrl = String(source.imageUrl || "").trim() || null;
   const replyTo = sanitizeReplyImageForWire(source.replyTo, allowLargeDataUrl);
 
   let safeImageUrl = imageUrl;
-  if (!allowLargeDataUrl && isOversizedDataUrl(imageUrl)) {
+  if (!allowLargeDataUrl && !isSticker && isOversizedDataUrl(imageUrl)) {
     safeImageUrl = null;
   }
 
@@ -5697,12 +5699,14 @@ function sanitizeMessageForStorage(message) {
   if (!message) return message;
   const imageUrl = message.imageUrl;
   const replyTo = message.replyTo;
-  const needsStrip = isOversizedDataUrl(imageUrl) || (replyTo && isOversizedDataUrl(replyTo.imageUrl));
+  // 表情包必须保留 data URL，否则历史消息刷新后只能看到 [表情包] 占位
+  const isSticker = Boolean(message.asSticker) || String(message.imageKey || '').startsWith('local-sticker:');
+  const needsStrip = !isSticker && (isOversizedDataUrl(imageUrl) || (replyTo && isOversizedDataUrl(replyTo.imageUrl)));
   if (!needsStrip) return message;
 
   return {
     ...message,
-    imageUrl: isOversizedDataUrl(imageUrl) ? undefined : imageUrl,
+    imageUrl: isSticker ? imageUrl : (isOversizedDataUrl(imageUrl) ? undefined : imageUrl),
     replyTo: replyTo && isOversizedDataUrl(replyTo.imageUrl) ? { ...replyTo, imageUrl: undefined } : replyTo,
   };
 }
@@ -5844,7 +5848,8 @@ export function addChatMessage(roomId, userId, text, options = {}) {
   }
 
   // 内存里也不长期保留超大 data URL，实时广播后即可压缩历史体积
-  if (isOversizedDataUrl(message.imageUrl)) {
+  // 但表情包必须保留 data URL，否则历史消息刷新后只能看到 [表情包] 占位
+  if (!asSticker && isOversizedDataUrl(message.imageUrl)) {
     setImmediate(() => {
       if (message.imageUrl && isOversizedDataUrl(message.imageUrl)) {
         message.imageUrl = undefined;

@@ -5151,8 +5151,10 @@ io.on('connection', (socket) => {
 
     const rawUrl = String(result.message?.imageUrl || '');
     const hugeDataUrl = rawUrl.startsWith('data:') && rawUrl.length > 12 * 1024;
-    if (hugeDataUrl) {
-      // 超大 data URL：其他人只收占位，发送者收完整图（socket.to 不含自己）
+    // 表情包必须广播完整 imageUrl，否则其他人只能看到 [表情包] 占位
+    const isStickerMsg = Boolean(result.message?.asSticker) || String(result.message?.imageKey || '').startsWith('local-sticker:');
+    if (hugeDataUrl && !isStickerMsg) {
+      // 超大 data URL 且非表情包：其他人只收占位，发送者收完整图（socket.to 不含自己）
       socket.to(roomId).emit('chat_message', { ...result.message, imageUrl: null });
       socket.emit('chat_message', result.message);
     } else {
